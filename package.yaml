@@ -1,0 +1,50 @@
+name:                musicmon
+version:             0.1.0.0
+
+extra-source-files:
+- README.md
+
+description:         Please see the README on GitHub
+
+dependencies:
+- base >= 4.7 && < 5
+- containers
+- mtl
+- text
+- time
+- clock
+- conduit
+- persistent
+- persistent-sqlite
+- libmpd
+- monad-logger
+- ConfigFile
+- directory
+
+library:
+  source-dirs: src
+
+executables:
+  musicmon:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - musicmon
+
+tests:
+  musicmon-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - musicmon
+    - hspec
+    - time
+    - clock
