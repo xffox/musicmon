@@ -44,7 +44,7 @@ stepMusicState musicState@(MusicState config (Just (songState, prevTime))) (play
                   (SongState playerState totalDuration, Nothing)
                 _ ->
                   (SongState playerState 0,
-                  fmap (Model.PlayedSong time) $
+                  Model.PlayedSong time <$>
                     checkPlayedDuration config prevSong totalDuration)
             (Model.StatePaused prevSong) ->
               case playerState of
@@ -52,7 +52,7 @@ stepMusicState musicState@(MusicState config (Just (songState, prevTime))) (play
                   (SongState playerState (songPlayedDuration songState), Nothing)
                 _ ->
                   (SongState playerState 0,
-                  fmap (Model.PlayedSong time) $
+                  Model.PlayedSong time <$>
                     checkPlayedDuration config prevSong (songPlayedDuration songState))
             Model.StateStopped ->
                   (SongState playerState 0, Nothing)

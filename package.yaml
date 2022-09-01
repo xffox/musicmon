@@ -8,21 +8,19 @@ description:         Please see the README on GitHub
 
 dependencies:
 - base >= 4.7 && < 5
-- containers
 - mtl
 - text
-- time
-- clock
 - conduit
 - persistent
-- persistent-sqlite
-- libmpd
 - monad-logger
-- ConfigFile
-- directory
 
 library:
   source-dirs: src
+  dependencies:
+  - containers
+  - time
+  - clock
+  - libmpd
 
 executables:
   musicmon:
@@ -34,6 +32,12 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - musicmon
+    - resourcet
+    - split
+    - stm-conduit
+    - persistent-sqlite
+    - directory
+    - ConfigFile
 
 tests:
   musicmon-test:

@@ -41,9 +41,9 @@ waitState config = do
 makePlayerState = do
   st <- MPD.status
   case MPD.stState st of
-    MPD.Stopped -> return $ Right $ Model.StateStopped
-    MPD.Playing -> (fmap Model.StatePlaying) <$> (prepareSong st)
-    MPD.Paused -> (fmap Model.StatePaused) <$> (prepareSong st)
+    MPD.Stopped -> return $ Right Model.StateStopped
+    MPD.Playing -> fmap Model.StatePlaying <$> prepareSong st
+    MPD.Paused -> fmap Model.StatePaused <$> prepareSong st
   where prepareSong st = do
           maybeSong <- fmap maybeHead $ MPD.playlistId $ MPD.stSongID st
           case maybeSong of
@@ -106,6 +106,6 @@ currentSystemTime :: (MonadIO.MonadIO m, Except.MonadError String m) => m Clock.
 currentSystemTime = MonadIO.liftIO $ Clock.getTime Clock.Monotonic
 
 currentUTCTime ::(MonadIO.MonadIO m, Except.MonadError String m) => m UTCClock.UTCTime
-currentUTCTime = MonadIO.liftIO $ UTCClock.getCurrentTime
+currentUTCTime = MonadIO.liftIO UTCClock.getCurrentTime
 
 maybeHead = Foldable.find (const True)

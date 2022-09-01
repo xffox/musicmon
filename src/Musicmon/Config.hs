@@ -6,6 +6,7 @@ module Musicmon.Config(Config(..),
 newtype ConfigDB = ConfigDB {
     configDBFilename :: String
                             }
+  deriving (Show)
 
 data ConfigMPD = ConfigMPD {
     configMPDHost :: String,
@@ -19,7 +20,7 @@ newtype ConfigScrobble = ConfigScrobble {
                                         }
 
 data Config = Config {
-    configDB :: ConfigDB,
-    configMPD :: Maybe ConfigMPD,
+    configDB :: Maybe ConfigDB,
+    configMPD :: [Maybe ConfigMPD],
     configScrobble :: ConfigScrobble
                      }

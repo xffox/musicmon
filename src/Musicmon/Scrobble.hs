@@ -15,12 +15,13 @@ import qualified Musicmon.MusicState as MusicState
 import qualified Musicmon.MusicSource as MusicSource
 
 produceStates :: (MonadIO.MonadIO m, MonadFail m, Logger.MonadLogger m) =>
-  Config.Config -> Conduit.ConduitT i (Maybe (Model.PlayerState, Model.Timestamp)) m ()
-produceStates config = do
-  st <- Except.runExceptT $ MusicSource.getState (Config.configMPD config)
+  (Maybe Config.ConfigMPD, Config.ConfigScrobble) ->
+    Conduit.ConduitT i (Maybe (Model.PlayerState, Model.Timestamp)) m ()
+produceStates config@(configMPD, configScrobble) = do
+  st <- Except.runExceptT $ MusicSource.getState configMPD
   handleState st
   where doProduceStates = do
-            st <- Except.runExceptT $ MusicSource.waitState (Config.configMPD config)
+            st <- Except.runExceptT $ MusicSource.waitState configMPD
             handleState st
         handleState (Right s) = do
             Conduit.yield $ Just s
@@ -33,9 +34,9 @@ produceStates config = do
             produceStates config
 
 filterSongs :: (MonadIO.MonadIO m, MonadFail m, Logger.MonadLogger m) =>
-  Config.Config ->
+  Config.ConfigScrobble ->
   Conduit.ConduitT (Maybe (Model.PlayerState, Model.Timestamp)) Model.PlayedSong m ()
-filterSongs config = doFilterSongs (MusicState.initMusicState (Config.configScrobble config))
+filterSongs configScrobble = doFilterSongs (MusicState.initMusicState configScrobble)
     where doFilterSongs state = do
             cur <- Conduit.await
             case cur of

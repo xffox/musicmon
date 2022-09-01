@@ -2,6 +2,7 @@
 module Main where
 
 import qualified Data.Text as Text
+import qualified Data.List.Split as Split
 import qualified Control.Monad as Monad
 import qualified Text.Printf as Printf
 import qualified Control.Monad.IO.Class as MonadIO
@@ -11,7 +12,10 @@ import qualified Database.Persist.Sql as PersistSql
 import qualified Database.Persist.Sqlite as PersistSqlite
 import qualified Control.Monad.Logger as Logger
 import qualified Control.Monad.Except as Except
+import qualified Control.Monad.Trans.Resource as Resource
 import qualified System.Directory as Directory
+import qualified Data.Conduit.TMChan as TMChan
+import Control.Applicative((<|>))
 import Conduit((.|))
 
 import qualified Musicmon.Scrobble as Scrobble
@@ -43,19 +47,27 @@ configTryGet cp section option =
               e -> Except.throwError e
 
 readDBConfig :: Monad m => ConfigFile.ConfigParser ->
-    Except.ExceptT String m Config.ConfigDB
+    Except.ExceptT String m (Maybe Config.ConfigDB)
 readDBConfig cp = do
-    Monad.unless (ConfigFile.has_section cp dbSection) $ Except.throwError "db"
-    Config.ConfigDB <$>
-        configGet cp dbSection "filename"
+    if ConfigFile.has_section cp dbSection
+       then Just . Config.ConfigDB <$> configGet cp dbSection "filename"
+       else return Nothing
 
 readMPDConfig cp = do
     if ConfigFile.has_section cp mpdSection
-       then fmap Just $ Config.ConfigMPD <$>
-           configGet cp mpdSection "host" <*>
-           configGet cp mpdSection "port" <*>
-           configTryGet cp mpdSection "password"
-       else return Nothing
+       then ((:[]) . Just <$> readMPDSection cp mpdSection) <|>
+           readMPDMultipleSections cp mpdSection
+       else return [Nothing]
+
+readMPDSection cp section = do
+    Config.ConfigMPD <$>
+        configGet cp section "host" <*>
+        configGet cp section "port" <*>
+        configTryGet cp section "password"
+
+readMPDMultipleSections cp mainSection = do
+    sections <- Split.splitOn "," <$> configGet cp mainSection "servers"
+    Monad.mapM (fmap Just . readMPDSection cp) sections
 
 readScrobbleConfig cp = do
     Monad.unless (ConfigFile.has_section cp scrobbleSection) $
@@ -74,6 +86,18 @@ readConfig =
         Config.Config <$> readDBConfig cp <*> readMPDConfig cp <*>
             readScrobbleConfig cp
 
+runScrobble scrobbleConfig mpdConfigs sink = do
+    let produceSongs mpdConfig =
+            Scrobble.produceStates
+              (mpdConfig, scrobbleConfig) .|
+                  Scrobble.filterSongs scrobbleConfig
+    Resource.runResourceT $ do
+        sources <- Conduit.runResourceT
+            (TMChan.mergeSources
+                (map produceSongs mpdConfigs) (max 1 (length mpdConfigs)))
+        Conduit.runConduit $ sources .|
+            Conduit.iterMC $(Logger.logInfoSH) .| sink
+
 main :: IO ()
 main = Logger.runStderrLoggingT $
     Logger.filterLogger (curry ((>= Logger.LevelInfo) . snd)) $ do
@@ -85,14 +109,18 @@ main = Logger.runStderrLoggingT $
           Right config -> do
               $(Logger.logInfo) "running music monitor"
               $(Logger.logInfo) $ Text.pack $
-                  Printf.printf "mpd connection: %s" (show $ Config.configMPD config)
-              PersistSqlite.withSqliteConn (Text.pack $
-                    Config.configDBFilename $ Config.configDB config) $
-                  \db -> do
-                      flip PersistSql.runSqlConn db $
-                          PersistSqlite.runMigrationSilent Store.migrateTables
-                      Conduit.runConduit $
-                          Scrobble.produceStates config .|
-                              Scrobble.filterSongs config .|
-                              Conduit.iterMC $(Logger.logInfoSH) .|
-                                  Store.sinkDatabase db
+                  Printf.printf "mpd connections: %s" (show $ Config.configMPD config)
+              $(Logger.logInfo) $ Text.pack $
+                  Printf.printf "db: %s" (show $ Config.configDB config)
+              case Config.configDB config of
+                Just dbConfig ->
+                    PersistSqlite.withSqliteConn (Text.pack $
+                        Config.configDBFilename dbConfig) $
+                      \db -> do
+                          flip PersistSql.runSqlConn db $
+                              PersistSqlite.runMigrationSilent Store.migrateTables
+                          runScrobble (Config.configScrobble config)
+                            (Config.configMPD config) (Store.sinkDatabase db)
+                          return ()
+                Nothing -> runScrobble (Config.configScrobble config)
+                    (Config.configMPD config) Conduit.sinkNull
