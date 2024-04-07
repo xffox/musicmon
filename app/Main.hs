@@ -78,10 +78,10 @@ readScrobbleConfig cp = do
 readConfig :: IO (Either String Config.Config)
 readConfig =
     Except.runExceptT $ do
-        workdir <- Except.liftIO $
+        workdir <- MonadIO.liftIO $
             Directory.getXdgDirectory Directory.XdgConfig "musicmon"
-        Except.liftIO $ Directory.setCurrentDirectory workdir
-        cp <- fromCPError $ Except.join $ Except.liftIO $
+        MonadIO.liftIO $ Directory.setCurrentDirectory workdir
+        cp <- fromCPError $ Monad.join $ MonadIO.liftIO $
             ConfigFile.readfile ConfigFile.emptyCP "musicmon.cfg"
         Config.Config <$> readDBConfig cp <*> readMPDConfig cp <*>
             readScrobbleConfig cp
