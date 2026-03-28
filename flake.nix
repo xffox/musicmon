@@ -2,17 +2,26 @@
   description = "musicmon";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-24.11";
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         musicmonPkg = pkgs.callPackage ./nix/musicmon.nix { };
-      in {
+      in
+      {
         packages.default = musicmonPkg;
-        devShells.default = pkgs.callPackage ./nix/shell.nix { };
-      });
+        devShells.default = pkgs.callPackage ./nix/shell.nix { musicmon = musicmonPkg; };
+      }
+    );
 }
