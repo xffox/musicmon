@@ -20,11 +20,7 @@ getState :: (MonadIO.MonadIO m, Except.MonadError String m) =>
   Maybe Config.ConfigMPD -> m (Model.PlayerState, Model.Timestamp)
 getState config = do
     state <- runMPD config makePlayerState
-    case state of
-      Right st -> do
-        ts <- makeTimestamp
-        return (st, ts)
-      Left err -> Except.throwError err
+    processState state
 
 waitState :: (MonadIO.MonadIO m, Except.MonadError String m) =>
   Maybe Config.ConfigMPD -> m (Model.PlayerState, Model.Timestamp)
@@ -32,29 +28,29 @@ waitState config = do
   state <- runMPD config $ do
     waitChange
     makePlayerState
-  case state of
-    Right st -> do
-      ts <- makeTimestamp
-      return (st, ts)
-    Left err -> Except.throwError err
+  processState state
+
+processState state = do
+    ts <- makeTimestamp
+    case state of
+        (Right st) -> 
+            return (st, ts)
+        (Left (MPD.Unexpected _)) ->
+            return (Model.StateStopped, ts)
+        Left err -> Except.throwError (Printf.printf "MPD action failed: %s" (show err))
 
 makePlayerState = do
   st <- MPD.status
   case MPD.stState st of
-    MPD.Stopped -> return $ Right Model.StateStopped
-    MPD.Playing -> fmap Model.StatePlaying <$> prepareSong st
-    MPD.Paused -> fmap Model.StatePaused <$> prepareSong st
+    MPD.Stopped -> return $ Model.StateStopped
+    MPD.Playing -> Model.StatePlaying <$> prepareSong st
+    MPD.Paused -> Model.StatePaused <$> prepareSong st
   where prepareSong st = do
           maybeSong <- fmap maybeHead $ MPD.playlistId $ MPD.stSongID st
           case maybeSong of
-            Just s -> return $ Right $ toModelSong s
-            _ -> return $ Left "MPD error: failed to find song"
-
-findSong songID = do
-  songs <- MPD.find (MPD.qFile songID)
-  case songs of
-    (s:_) -> return $ Just s
-    _ -> return Nothing
+            Just s -> return $ toModelSong s
+            -- weird state with unknown songs on some server implementations
+            _ -> return $ Model.Song "" 0 0 "" "" "" Nothing Nothing Nothing 0
 
 toModelSong song =
    Model.Song
@@ -86,14 +82,9 @@ runMPD config act = do
   res <- MonadIO.liftIO $
     Exception.handle (\e ->
       let e' = e :: Exception.IOException
-       in return (Left (Printf.printf "MPD error: %s" $ show e))) $ do
-      resp <- withMPD act
-      case resp of
-        Left err -> return $ Left $ show err
-        Right res -> return $ Right res
+       in return (Left ((Printf.printf "MPD error: %s" $ show e') :: String))) $ fmap Right $ withMPD act
   case res of
-    Left err -> Except.throwError $
-      Printf.printf "MPD action failed: %s" (show err)
+    Left err -> Except.throwError $ err
     Right r -> return r
 
 makeTimestamp :: (MonadIO.MonadIO m, Except.MonadError String m) =>
