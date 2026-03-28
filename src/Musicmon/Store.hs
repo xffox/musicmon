@@ -1,20 +1,37 @@
-{-# LANGUAGE QuasiQuotes, TemplateHaskell, TypeFamilies,
-   OverloadedStrings, GADTs, FlexibleContexts, DerivingStrategies,
-   StandaloneDeriving, GeneralizedNewtypeDeriving, UndecidableInstances,
-   DataKinds, FlexibleInstances, MultiParamTypeClasses #-}
-module Musicmon.Store(sinkDatabase, migrateTables) where
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-import qualified Data.Void as Void
+module Musicmon.Store (sinkDatabase, migrateTables) where
+
+import qualified Conduit
 import qualified Data.Text as Text
 import qualified Data.Time.Clock as Clock
-import qualified Conduit
+import qualified Data.Void as Void
 import qualified Database.Persist.Sql as PersistSql
-import Database.Persist.TH (mkPersist, mkMigrate, persistLowerCase,
-    share, sqlSettings)
+import Database.Persist.TH (
+    mkMigrate,
+    mkPersist,
+    persistLowerCase,
+    share,
+    sqlSettings,
+ )
 
 import qualified Musicmon.Model as Model
 
-share [mkPersist sqlSettings, mkMigrate "migrateTables"] [persistLowerCase|
+share
+    [mkPersist sqlSettings, mkMigrate "migrateTables"]
+    [persistLowerCase|
     Song
         timestamp Clock.UTCTime
         title Text.Text
@@ -28,19 +45,24 @@ share [mkPersist sqlSettings, mkMigrate "migrateTables"] [persistLowerCase|
         mbArtistId Text.Text Maybe
         |]
 
-sinkDatabase :: (Monad m, Conduit.MonadUnliftIO m) => PersistSql.SqlBackend ->
+sinkDatabase ::
+    (Monad m, Conduit.MonadUnliftIO m) =>
+    PersistSql.SqlBackend ->
     Conduit.ConduitT Model.PlayedSong Void.Void m ()
 sinkDatabase db = do
     maybeSong <- Conduit.await
     case maybeSong of
-      Nothing -> return ()
-      Just song -> do
-          Conduit.lift $ flip PersistSql.runSqlConn db $
-              PersistSql.insert_ $ fromModelSong song
-          sinkDatabase db
+        Nothing -> return ()
+        Just song -> do
+            Conduit.lift $
+                flip PersistSql.runSqlConn db $
+                    PersistSql.insert_ $
+                        fromModelSong song
+            sinkDatabase db
 
 fromModelSong (Model.PlayedSong timestamp song) =
-    Song (Model.timestampUTC timestamp)
+    Song
+        (Model.timestampUTC timestamp)
         (Model.songTitle song)
         (fromIntegral $ Model.songTrack song)
         (fromIntegral $ Model.songDisc song)

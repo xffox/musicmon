@@ -37,7 +37,7 @@ executables:
     - stm-conduit
     - persistent-sqlite
     - directory
-    - ConfigFile
+    - config-ini
 
 tests:
   musicmon-test:
