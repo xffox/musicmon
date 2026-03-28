@@ -1,1 +1,4 @@
 /.stack-work/
+# generated
+/musicmon.cabal
+/stack.yaml.lock
